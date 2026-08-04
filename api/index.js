@@ -1,7 +1,7 @@
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export default async function handler(req, res) {
-  // CORS headers များ
+  // CORS Headers
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-api-key, Authorization");
@@ -17,7 +17,6 @@ export default async function handler(req, res) {
   try {
     const { prompt, systemInstruction, apiKey } = req.body;
 
-    // API key ကို Request (သို့) Vercel ရဲ့ Environment Variable ကနေ ယူပါမယ်
     const authHeader = req.headers.authorization;
     let headerApiKey = req.headers["x-api-key"];
     
@@ -32,21 +31,14 @@ export default async function handler(req, res) {
     }
 
     const genAI = new GoogleGenerativeAI(finalApiKey);
-    
-    const modelOptions = {
-      model: "gemini-1.5-flash", 
-    };
-
-    if (systemInstruction) {
-      modelOptions.systemInstruction = systemInstruction;
-    }
-
-    const model = genAI.getGenerativeModel(modelOptions);
+    const model = genAI.getGenerativeModel({
+      model: "gemini-1.5-flash",
+      ...(systemInstruction && { systemInstruction })
+    });
 
     const result = await model.generateContent(prompt);
     const text = result.response.text();
 
-    // App ဘက်က မျှော်လင့်ထားတဲ့ { "text": "..." } ပုံစံနဲ့ ပြန်ပို့ပေးပါမယ်
     return res.status(200).json({ text: text });
   } catch (error) {
     console.error("Gemini API Error:", error);

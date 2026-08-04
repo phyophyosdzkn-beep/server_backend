@@ -1,49 +1,27 @@
-// Vercel Serverless Function for Gemini Movie Recap Relay (BYOK Support)
 export default async function handler(req, res) {
-  // CORS Headers (APK မှ တိုက်ရိုက် ခေါ်ယူနိုင်ရန်)
-  res.setHeader('Access-Control-Allow-Credentials', true);
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader(
-    'Access-Control-Allow-Headers',
-    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization, x-api-key'
-  );
-
-  // OPTIONS Request ကို လက်ခံခြင်း (Preflight)
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
-  }
-
+  // POST request မဟုတ်ရင် ပိတ်မည်
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method Not Allowed. Only POST is accepted.' });
+    return res.status(405).json({ error: 'Method Not Allowed. Use POST.' });
   }
 
   try {
+    // Android App ကနေ ပို့လိုက်တဲ့ data တွေကို ယူမယ်
     const { prompt, systemInstruction, apiKey } = req.body;
 
-    // App မှ Headers သို့မဟုတ် Body ထဲပါလာသော Key ကို ရယူခြင်း
-    const userApiKey = apiKey || req.headers['x-api-key'] || process.env.GEMINI_API_KEY;
+    // App ကနေ API key မပါလာရင် Vercel environment variable က key ကို သုံးမယ်
+    const geminiApiKey = apiKey || process.env.GEMINI_API_KEY;
 
-    if (!userApiKey) {
-      return res.status(400).json({ 
-        error: 'Gemini API Key မပါရှိပါ။ ကျေးဇူးပြု၍ APK ၏ Settings တွင် API Key ထည့်သွင်းပါ။' 
-      });
+    if (!geminiApiKey) {
+      return res.status(401).json({ error: 'API Key မရှိပါ။ Vercel Environment Variables တွင် GEMINI_API_KEY ကို ထည့်ပါ သို့မဟုတ် App မှ ပေးပို့ပါ။' });
     }
 
     if (!prompt) {
-      return res.status(400).json({ error: 'Prompt စာသား ပါရှိခြင်း မရှိပါ။' });
+      return res.status(400).json({ error: 'Prompt မပါဝင်ပါ။' });
     }
 
-    // Google Gemini API သို့ သွားရောက် ခေါ်ယူခြင်း
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${userApiKey}`;
-
+    // Gemini API ကို လှမ်းခေါ်ရန် Payload တည်ဆောက်ခြင်း
     const requestPayload = {
-      contents: [
-        {
-          parts: [{ text: prompt }]
-        }
-      ]
+      contents: [{ parts: [{ text: prompt }] }]
     };
 
     if (systemInstruction) {
@@ -52,7 +30,8 @@ export default async function handler(req, res) {
       };
     }
 
-    const geminiResponse = await fetch(geminiUrl, {
+    // Gemini API သို့ တိုက်ရိုက် HTTP request ပို့ခြင်း
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -60,28 +39,20 @@ export default async function handler(req, res) {
       body: JSON.stringify(requestPayload)
     });
 
-    const data = await geminiResponse.json();
+    const data = await response.json();
 
-    if (!geminiResponse.ok) {
-      console.error('Gemini API Error:', data);
-      return res.status(geminiResponse.status).json({
-        error: data.error?.message || 'Gemini API မှ တုံ့ပြန်မှု အမှား ရရှိပါသည်။'
-      });
+    if (!response.ok) {
+      throw new Error(data.error?.message || 'Gemini API Error');
     }
 
-    // တုံ့ပြန်မှု စာသားကို သန့်စင်၍ အကြောင်းပြန်ခြင်း
-    const textOutput = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    // Gemini ဆီက ပြန်လာတဲ့ စာသားကို ယူခြင်း
+    const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
-    return res.status(200).json({
-      text: textOutput,
-      result: textOutput,
-      candidates: data.candidates
-    });
+    // Android App ကို ပြန်ပို့ပေးခြင်း
+    return res.status(200).json({ text: generatedText });
 
   } catch (error) {
-    console.error('Server Relay Error:', error);
-    return res.status(500).json({ 
-      error: `Internal Server Error: ${error.message}` 
-    });
+    console.error('Error:', error);
+    return res.status(500).json({ error: error.message || 'Internal Server Error' });
   }
 }

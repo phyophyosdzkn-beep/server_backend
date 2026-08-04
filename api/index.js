@@ -1,58 +1,55 @@
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+
 export default async function handler(req, res) {
-  // POST request မဟုတ်ရင် ပိတ်မည်
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method Not Allowed. Use POST.' });
+  // CORS headers များ
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-api-key, Authorization");
+
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed. Use POST." });
   }
 
   try {
-    // Android App ကနေ ပို့လိုက်တဲ့ data တွေကို ယူမယ်
     const { prompt, systemInstruction, apiKey } = req.body;
 
-    // App ကနေ API key မပါလာရင် Vercel environment variable က key ကို သုံးမယ်
-    const geminiApiKey = apiKey || process.env.GEMINI_API_KEY;
-
-    if (!geminiApiKey) {
-      return res.status(401).json({ error: 'API Key မရှိပါ။ Vercel Environment Variables တွင် GEMINI_API_KEY ကို ထည့်ပါ သို့မဟုတ် App မှ ပေးပို့ပါ။' });
+    // API key ကို Request (သို့) Vercel ရဲ့ Environment Variable ကနေ ယူပါမယ်
+    const authHeader = req.headers.authorization;
+    let headerApiKey = req.headers["x-api-key"];
+    
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      headerApiKey = authHeader.substring(7);
     }
 
-    if (!prompt) {
-      return res.status(400).json({ error: 'Prompt မပါဝင်ပါ။' });
+    const finalApiKey = apiKey || headerApiKey || process.env.GEMINI_API_KEY;
+
+    if (!finalApiKey) {
+      return res.status(400).json({ error: "API key is required." });
     }
 
-    // Gemini API ကို လှမ်းခေါ်ရန် Payload တည်ဆောက်ခြင်း
-    const requestPayload = {
-      contents: [{ parts: [{ text: prompt }] }]
+    const genAI = new GoogleGenerativeAI(finalApiKey);
+    
+    const modelOptions = {
+      model: "gemini-1.5-flash", 
     };
 
     if (systemInstruction) {
-      requestPayload.systemInstruction = {
-        parts: [{ text: systemInstruction }]
-      };
+      modelOptions.systemInstruction = systemInstruction;
     }
 
-    // Gemini API သို့ တိုက်ရိုက် HTTP request ပို့ခြင်း
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(requestPayload)
-    });
+    const model = genAI.getGenerativeModel(modelOptions);
 
-    const data = await response.json();
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
 
-    if (!response.ok) {
-      throw new Error(data.error?.message || 'Gemini API Error');
-    }
-
-    // Gemini ဆီက ပြန်လာတဲ့ စာသားကို ယူခြင်း
-    const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-    // Android App ကို ပြန်ပို့ပေးခြင်း
-    return res.status(200).json({ text: generatedText });
-
+    // App ဘက်က မျှော်လင့်ထားတဲ့ { "text": "..." } ပုံစံနဲ့ ပြန်ပို့ပေးပါမယ်
+    return res.status(200).json({ text: text });
   } catch (error) {
-    console.error('Error:', error);
-    return res.status(500).json({ error: error.message || 'Internal Server Error' });
+    console.error("Gemini API Error:", error);
+    return res.status(500).json({ error: error.message || "Internal server error" });
   }
 }

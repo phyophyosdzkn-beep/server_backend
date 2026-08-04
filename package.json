@@ -1,8 +1,11 @@
 {
   "name": "gemini-recap-backend",
   "version": "1.0.0",
-  "description": "Vercel Backend for Gemini API",
+  "description": "Vercel serverless function for Gemini API",
   "dependencies": {
-    "@google/genai": "^0.1.2"
+    "@google/generative-ai": "^0.21.0"
+  },
+  "engines": {
+    "node": "18.x"
   }
 }

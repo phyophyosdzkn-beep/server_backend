@@ -1,7 +1,8 @@
 {
-  "name": "gemini-recap-relay",
+  "name": "gemini-recap-backend",
   "version": "1.0.0",
-  "description": "Vercel Relay Server for Movie Recap App with BYOK",
-  "main": "api/recap.js",
-  "dependencies": {}
+  "description": "Vercel Backend for Gemini API",
+  "dependencies": {
+    "@google/genai": "^0.1.2"
+  }
 }
